@@ -1,23 +1,28 @@
 import styles from "./App.module.css";
 import SearchBar from "../SearchBar/SearchBar";
 import MovieGrid from "../MovieGrid/MovieGrid";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import type { Movie } from "../../types/movie";
 import Loader from "../Loader/Loader";
 import ErrorMessage from "../ErrorMessage/ErrorMessage";
-import toast from "react-hot-toast";
-import { fetchMovies, isRequestCanceled } from "../../services/movieService";
+import { fetchMovies } from "../../services/movieService";
 import MovieModal from "../MovieModal/MovieModal";
-import Pagination from "../Pagination/Pagination";
+import ReactPaginateImport from "react-paginate";
+import { useQuery } from "@tanstack/react-query";
+import iziToast from "izitoast";
+import "izitoast/dist/css/iziToast.min.css";
+
+const ReactPaginate =
+  (
+    ReactPaginateImport as unknown as {
+      default?: ComponentType<React.ComponentProps<typeof ReactPaginateImport>>;
+    }
+  ).default ?? ReactPaginateImport;
 
 export default function App() {
   const [query, setQuery] = useState("");
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
 
   function handleSearch(newQuery: string) {
     setQuery(newQuery);
@@ -29,53 +34,47 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  const controller = new AbortController();
+
+  const { data, isError, isLoading } = useQuery({
+    queryKey: ["movies", query, page],
+    queryFn: () => fetchMovies(query, page, controller.signal),
+  });
+
+  const shouldShowNoResultsToast =
+    !isLoading &&
+    !isError &&
+    query.trim() !== "" &&
+    (data?.movies.length ?? 0) === 0;
+
   useEffect(() => {
-    if (!query) return;
-
-    const controller = new AbortController();
-
-    (async () => {
-      setLoading(true);
-      setError(false);
-      try {
-        const { movies: data, totalPages: pages } = await fetchMovies(
-          query,
-          page,
-          controller.signal,
-        );
-        setMovies(data);
-        setTotalPages(pages);
-        if (data.length === 0) {
-          toast.error("No movies found for your request.");
-        }
-      } catch (error) {
-        if (isRequestCanceled(error)) {
-          return;
-        }
-        setError(true);
-        toast.error("There was an error fetching movies, please try again.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-
-    return () => {
-      controller.abort();
-    };
-  }, [query, page]);
+    if (shouldShowNoResultsToast) {
+      iziToast.error({
+        title: "No results found",
+        message: "Please try a different search query.",
+        position: "topCenter",
+      });
+    }
+  }, [shouldShowNoResultsToast]);
 
   return (
     <div className={styles.app}>
       <SearchBar onSubmit={handleSearch} />
-      {loading && <Loader />}
-      {error && <ErrorMessage />}
-      {movies.length > 0 && (
+      {isLoading && <Loader />}
+      {isError && <ErrorMessage />}
+      {data && data.movies.length > 0 && (
         <>
-          <MovieGrid movies={movies} onSelect={setSelectedMovie} />
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
+          <MovieGrid movies={data.movies} onSelect={setSelectedMovie} />
+          <ReactPaginate
+            pageCount={data.totalPages}
+            pageRangeDisplayed={5}
+            marginPagesDisplayed={1}
+            onPageChange={() => handlePageChange(page + 1)}
+            forcePage={page - 1}
+            containerClassName={styles.pagination}
+            activeClassName={styles.active}
+            nextLabel="→"
+            previousLabel="←"
           />
         </>
       )}
