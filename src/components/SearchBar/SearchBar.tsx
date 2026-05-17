@@ -1,12 +1,20 @@
 import styles from "./SearchBar.module.css";
-import { Formik, Form, Field, ErrorMessage } from "formik";
-import * as Yup from "yup";
+import toast from "react-hot-toast";
 
 interface SearchBarProps {
   onSubmit: (query: string) => void;
 }
 
 export default function SearchBar({ onSubmit }: SearchBarProps) {
+  function handleAction(formData: FormData) {
+    const query = (formData.get("query") as string).trim();
+    if (!query) {
+      toast.error("Please enter a search query.");
+      return;
+    }
+    onSubmit(query);
+  }
+
   return (
     <header className={styles.header}>
       <div className={styles.container}>
@@ -18,40 +26,19 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
         >
           Powered by TMDB
         </a>
-        <Formik
-          initialValues={{ query: "" }}
-          onSubmit={async (values: { query: string }) => {
-            onSubmit(values.query);
-          }}
-          validationSchema={Yup.object({
-            query: Yup.string().required("Please enter a search query"),
-          })}
-        >
-          {({ isSubmitting }) => (
-            <Form className={styles.form}>
-              <Field
-                className={styles.input}
-                type="text"
-                name="query"
-                autoComplete="off"
-                placeholder="Search movies..."
-                autoFocus
-              />
-              <button
-                className={styles.button}
-                type="submit"
-                disabled={isSubmitting}
-              >
-                Search
-              </button>
-              <ErrorMessage
-                name="query"
-                component="p"
-                className={styles.error}
-              />
-            </Form>
-          )}
-        </Formik>
+        <form className={styles.form} action={handleAction}>
+          <input
+            className={styles.input}
+            type="text"
+            name="query"
+            autoComplete="off"
+            placeholder="Search movies..."
+            autoFocus
+          />
+          <button className={styles.button} type="submit">
+            Search
+          </button>
+        </form>
       </div>
     </header>
   );
